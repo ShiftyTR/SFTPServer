@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="FxSsh/FxSsh.csproj" />
+  <Project Path="SFTPServer/SFTPServer.csproj" />
+  <Project Path="TestApp/TestApp.csproj" Id="c5e4265d-d28f-4db5-8e64-695f359600b7" />
+</Solution>
