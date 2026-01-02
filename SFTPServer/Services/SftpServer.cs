@@ -46,7 +46,7 @@ namespace SFTPServer.Services
         /// <summary>
         /// Start the SFTP server
         /// </summary>
-        public void Start()
+        public void Start(CancellationToken cancellationToken)
         {
             if (_config.EnableLogging)
             {
@@ -102,9 +102,21 @@ namespace SFTPServer.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error starting server: {ex.Message}");
-                throw;
+                if (_config.EnableLogging)
+                    Console.WriteLine($"Error starting server: {ex.Message}");
             }
+            Task.Run(async () =>
+            {
+                while (true)
+                {
+                    if(cancellationToken.IsCancellationRequested)
+                    {
+                        Stop();
+                        break;
+                    }
+                    await Task.Delay(10000);
+                }
+            });
         }
 
         /// <summary>
@@ -113,7 +125,8 @@ namespace SFTPServer.Services
         public void Stop()
         {
             _sshServer?.Stop();
-            Console.WriteLine("SFTP Server stopped");
+            if (_config.EnableLogging)
+                Console.WriteLine("SFTP Server stopped");
             _audit?.Dispose();
         }
 
@@ -258,118 +271,118 @@ namespace SFTPServer.Services
             }
         }
 
-                // Handler for UserAuth event (typed version)
-                private void HandleUserAuth(object sender, UserAuthArgs e, string sessionId)
+        // Handler for UserAuth event (typed version)
+        private void HandleUserAuth(object sender, UserAuthArgs e, string sessionId)
+        {
+            try
+            {
+                string username = e.Username ?? string.Empty;
+                string authMethod = e.AuthMethod ?? "unknown";
+                string password = e.Password ?? string.Empty;
+
+                if (_config.EnableLogging)
                 {
-                    try
-                    {
-                        string username = e.Username ?? string.Empty;
-                        string authMethod = e.AuthMethod ?? "unknown";
-                        string password = e.Password ?? string.Empty;
-
-                        if (_config.EnableLogging)
-                        {
-                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Auth: user='{username}', method='{authMethod}'");
-                        }
-
-                        e.Result = false; // Default to reject
-
-                        // Handle password authentication
-                        if (authMethod == "password")
-                        {
-                            if (_userManager.AuthenticatePassword(username, password, out var user))
-                            {
-                                e.Result = true;
-                                if (_config.EnableLogging)
-                                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ Authentication successful for user '{username}'");
-                        _audit?.LogAuthentication(sessionId, username, "password", true);
-                            }
-                            else
-                            {
-                                if (_config.EnableLogging)
-                                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Invalid credentials for user '{username}'");
-                        _audit?.LogAuthentication(sessionId, username, "password", false);
-                            }
-                        }
-                        // Handle publickey authentication
-                        else if (authMethod == "publickey")
-                        {
-                            var user = _userManager.GetUser(username);
-                            if (user != null && user.IsEnabled)
-                            {
-                                e.Result = true;
-                                if (_config.EnableLogging)
-                                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ Public key auth successful for user '{username}'");
-                        _audit?.LogAuthentication(sessionId, username, "publickey", true);
-                            }
-                            else
-                            {
-                                if (_config.EnableLogging)
-                                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ User '{username}' not found or disabled");
-                        _audit?.LogAuthentication(sessionId, username, "publickey", false);
-                            }
-                        }
-                        else
-                        {
-                            if (_config.EnableLogging)
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Auth method '{authMethod}' not supported");
-                        _audit?.LogError(sessionId, username, "auth", $"method={authMethod} not supported");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        if (_config.EnableLogging)
-                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Error in HandleUserAuth: {ex.Message}");
-                    }
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Auth: user='{username}', method='{authMethod}'");
                 }
 
-                // Handler for CommandOpened event (typed version)
-                private void HandleCommandOpened(object sender, CommandRequestedArgs e, string sessionId)
+                e.Result = false; // Default to reject
+
+                // Handle password authentication
+                if (authMethod == "password")
                 {
-                    try
+                    if (_userManager.AuthenticatePassword(username, password, out var user))
                     {
-                        string? shellType = e.ShellType;
-                        string? commandText = e.CommandText;
-
+                        e.Result = true;
                         if (_config.EnableLogging)
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ Authentication successful for user '{username}'");
+                        _audit?.LogAuthentication(sessionId, username, "password", true);
+                    }
+                    else
+                    {
+                        if (_config.EnableLogging)
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Invalid credentials for user '{username}'");
+                        _audit?.LogAuthentication(sessionId, username, "password", false);
+                    }
+                }
+                // Handle publickey authentication
+                else if (authMethod == "publickey")
+                {
+                    var user = _userManager.GetUser(username);
+                    if (user != null && user.IsEnabled)
+                    {
+                        e.Result = true;
+                        if (_config.EnableLogging)
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ Public key auth successful for user '{username}'");
+                        _audit?.LogAuthentication(sessionId, username, "publickey", true);
+                    }
+                    else
+                    {
+                        if (_config.EnableLogging)
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ User '{username}' not found or disabled");
+                        _audit?.LogAuthentication(sessionId, username, "publickey", false);
+                    }
+                }
+                else
+                {
+                    if (_config.EnableLogging)
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Auth method '{authMethod}' not supported");
+                    _audit?.LogError(sessionId, username, "auth", $"method={authMethod} not supported");
+                }
+            }
+            catch (Exception ex)
+            {
+                if (_config.EnableLogging)
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Error in HandleUserAuth: {ex.Message}");
+            }
+        }
+
+        // Handler for CommandOpened event (typed version)
+        private void HandleCommandOpened(object sender, CommandRequestedArgs e, string sessionId)
+        {
+            try
+            {
+                string? shellType = e.ShellType;
+                string? commandText = e.CommandText;
+
+                if (_config.EnableLogging)
+                {
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Command: type='{shellType}', cmd='{commandText}'");
+                }
+
+                // Handle SFTP subsystem - MUST set Agreed = true!
+                if (shellType == "subsystem" && commandText == "sftp")
+                {
+                    e.Agreed = true;  // Accept the SFTP subsystem request
+
+                    // Get authenticated user from AttachedUserAuthArgs
+                    string? username = e.AttachedUserAuthArgs?.Username;
+                    UserAccount? user = null;
+                    string userRoot = _config.RootDirectory;
+
+                    if (!string.IsNullOrEmpty(username))
+                    {
+                        user = _userManager.GetUser(username);
+                        if (user != null)
                         {
-                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Command: type='{shellType}', cmd='{commandText}'");
+                            userRoot = user.HomeDirectory;
                         }
+                    }
 
-                        // Handle SFTP subsystem - MUST set Agreed = true!
-                        if (shellType == "subsystem" && commandText == "sftp")
+                    if (_config.EnableLogging)
+                    {
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ SFTP subsystem AGREED for user '{username}'");
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}]   Root: {userRoot}");
+                        if (user != null)
                         {
-                            e.Agreed = true;  // Accept the SFTP subsystem request
+                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}]   Permissions: Upload={user.CanUpload}, Download={user.CanDownload}, Delete={user.CanDelete}");
+                        }
+                    }
 
-                            // Get authenticated user from AttachedUserAuthArgs
-                            string? username = e.AttachedUserAuthArgs?.Username;
-                            UserAccount? user = null;
-                            string userRoot = _config.RootDirectory;
-
-                            if (!string.IsNullOrEmpty(username))
-                            {
-                                user = _userManager.GetUser(username);
-                                if (user != null)
-                                {
-                                    userRoot = user.HomeDirectory;
-                                }
-                            }
-
-                            if (_config.EnableLogging)
-                            {
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ SFTP subsystem AGREED for user '{username}'");
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}]   Root: {userRoot}");
-                                if (user != null)
-                                {
-                                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}]   Permissions: Upload={user.CanUpload}, Download={user.CanDownload}, Delete={user.CanDelete}");
-                                }
-                            }
-
-                    // Start SFTP subsystem handler with user permissions and auditing
+                    // Start SFTP subsystem handler with UserManager for dynamic permission checking
                     var sftpHandler = new SftpSubsystem(
                         e.Channel,
                         userRoot,
-                        user,
+                        _userManager,
                         _config.EnableLogging,
                         _audit,
                         sessionId,
@@ -378,37 +391,37 @@ namespace SFTPServer.Services
                         _config.ConnectionTimeoutSeconds
                     );
 
-                            if (_config.EnableLogging)
-                            {
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ SFTP handler started");
-                            }
-                        }
-                        else if (shellType == "shell")
-                        {
-                            e.Agreed = false;
-                            if (_config.EnableLogging)
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Shell REJECTED (SFTP-only mode)");
-                        }
-                        else if (shellType == "exec")
-                        {
-                            e.Agreed = false;
-                            if (_config.EnableLogging)
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Exec REJECTED (SFTP-only mode)");
-                        }
-                        else
-                        {
-                            e.Agreed = false;
-                            if (_config.EnableLogging)
-                                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Unknown command type: {shellType}");
-                        }
-                    }
-                    catch (Exception ex)
+                    if (_config.EnableLogging)
                     {
-                        if (_config.EnableLogging)
-                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Error in HandleCommandOpened: {ex.Message}");
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✓ SFTP handler started");
                     }
                 }
-
-                public int ActiveConnections => _activeConnections;
+                else if (shellType == "shell")
+                {
+                    e.Agreed = false;
+                    if (_config.EnableLogging)
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Shell REJECTED (SFTP-only mode)");
+                }
+                else if (shellType == "exec")
+                {
+                    e.Agreed = false;
+                    if (_config.EnableLogging)
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Exec REJECTED (SFTP-only mode)");
+                }
+                else
+                {
+                    e.Agreed = false;
+                    if (_config.EnableLogging)
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] ✗ Unknown command type: {shellType}");
+                }
+            }
+            catch (Exception ex)
+            {
+                if (_config.EnableLogging)
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [{sessionId}] Error in HandleCommandOpened: {ex.Message}");
             }
         }
+
+        public int ActiveConnections => _activeConnections;
+    }
+}

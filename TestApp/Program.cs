@@ -32,15 +32,32 @@ namespace TestApp
 
                 // Create SFTP server with user manager
                 var server = new SftpServer(config, userManager);
+
+                // Create cancellation token source for graceful shutdown
+                using var cts = new CancellationTokenSource();
+                Console.CancelKeyPress += (s, e) =>
+                {
+                    e.Cancel = true;
+                    cts.Cancel();
+                };
+
                 // Start server
-                server.Start();
+                server.Start(cts.Token);
 
                 if (config.EnableLogging)
                 {
                     Console.WriteLine("Press Ctrl+C to stop the server...");
                     Console.WriteLine();
                 }
-                await Task.Delay(-1);
+
+                try
+                {
+                    await Task.Delay(-1, cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Graceful shutdown
+                }
             }
             catch (Exception ex)
             {

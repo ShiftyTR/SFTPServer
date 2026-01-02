@@ -11,7 +11,7 @@ namespace SFTPServer.Services
         private readonly SessionChannel _channel;
         private readonly string _rootDirectory;
         private readonly bool _enableLogging;
-        private readonly UserAccount? _user;
+        private readonly UserManager? _userManager;
         private readonly AuditLogger? _audit;
         private readonly string _sessionId = "-";
         private readonly string _username = "-";
@@ -66,12 +66,12 @@ namespace SFTPServer.Services
 
         private byte[] _buffer = Array.Empty<byte>();
 
-        public SftpSubsystem(SessionChannel channel, string rootDirectory, UserAccount? user = null, bool enableLogging = true, AuditLogger? audit = null, string sessionId = "-", string username = "-", long maxUploadBytes = 0, int idleTimeoutSeconds = 0)
+        public SftpSubsystem(SessionChannel channel, string rootDirectory, UserManager? userManager = null, bool enableLogging = true, AuditLogger? audit = null, string sessionId = "-", string username = "-", long maxUploadBytes = 0, int idleTimeoutSeconds = 0)
         {
             _channel = channel;
             _rootDirectory = rootDirectory;
             _currentDirectory = rootDirectory;
-            _user = user;
+            _userManager = userManager;
             _enableLogging = enableLogging;
             _audit = audit;
             _sessionId = sessionId;
@@ -96,7 +96,15 @@ namespace SFTPServer.Services
             }
 
             if (_enableLogging)
-                Console.WriteLine($"[SFTP] Subsystem initialized for user '{_user?.Username ?? "unknown"}', root: {_rootDirectory}");
+                Console.WriteLine($"[SFTP] Subsystem initialized for user '{_username}', root: {_rootDirectory}");
+        }
+
+        /// <summary>
+        /// Gets current user from UserManager for dynamic permission checking
+        /// </summary>
+        private UserAccount? GetCurrentUser()
+        {
+            return _userManager?.GetUser(_username);
         }
 
         private void OnCloseReceived(object? sender, EventArgs e)
@@ -457,20 +465,21 @@ namespace SFTPServer.Services
             bool isWrite = (pflags & 0x02) != 0 || (pflags & 0x08) != 0 || (pflags & 0x10) != 0 || (pflags & 0x20) != 0;
             bool isRead = (pflags & 0x01) != 0;
 
-            if (_user != null)
+            var currentUser = GetCurrentUser();
+            if (currentUser != null)
             {
-                if (isWrite && !_user.CanUpload)
+                if (isWrite && !currentUser.CanUpload)
                 {
                     if (_enableLogging)
-                        Console.WriteLine($"[SFTP] OPEN DENIED: User '{_user.Username}' does not have upload permission");
+                        Console.WriteLine($"[SFTP] OPEN DENIED: User '{currentUser.Username}' does not have upload permission");
                     SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied: Upload not allowed");
                     return;
                 }
 
-                if (isRead && !_user.CanDownload)
+                if (isRead && !currentUser.CanDownload)
                 {
                     if (_enableLogging)
-                        Console.WriteLine($"[SFTP] OPEN DENIED: User '{_user.Username}' does not have download permission");
+                        Console.WriteLine($"[SFTP] OPEN DENIED: User '{currentUser.Username}' does not have download permission");
                     SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied: Download not allowed");
                     return;
                 }
@@ -610,10 +619,11 @@ namespace SFTPServer.Services
                 Console.WriteLine($"[SFTP] REMOVE: {path}");
 
             // Check permission
-            if (_user != null && !_user.CanDelete)
+            var currentUser = GetCurrentUser();
+            if (currentUser != null && !currentUser.CanDelete)
             {
                 if (_enableLogging)
-                    Console.WriteLine($"[SFTP] REMOVE DENIED: User '{_user.Username}' does not have delete permission");
+                    Console.WriteLine($"[SFTP] REMOVE DENIED: User '{currentUser.Username}' does not have delete permission");
                 SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied");
                 return;
             }
@@ -649,10 +659,11 @@ namespace SFTPServer.Services
                 Console.WriteLine($"[SFTP] MKDIR: {path}");
 
             // Check permission
-            if (_user != null && !_user.CanCreateDirectory)
+            var currentUser = GetCurrentUser();
+            if (currentUser != null && !currentUser.CanCreateDirectory)
             {
                 if (_enableLogging)
-                    Console.WriteLine($"[SFTP] MKDIR DENIED: User '{_user.Username}' does not have create directory permission");
+                    Console.WriteLine($"[SFTP] MKDIR DENIED: User '{currentUser.Username}' does not have create directory permission");
                 SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied");
                 return;
             }
@@ -681,10 +692,11 @@ namespace SFTPServer.Services
                 Console.WriteLine($"[SFTP] RMDIR: {path}");
 
             // Check permission
-            if (_user != null && !_user.CanDelete)
+            var currentUser = GetCurrentUser();
+            if (currentUser != null && !currentUser.CanDelete)
             {
                 if (_enableLogging)
-                    Console.WriteLine($"[SFTP] RMDIR DENIED: User '{_user.Username}' does not have delete permission");
+                    Console.WriteLine($"[SFTP] RMDIR DENIED: User '{currentUser.Username}' does not have delete permission");
                 SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied");
                 return;
             }
@@ -721,10 +733,11 @@ namespace SFTPServer.Services
                 Console.WriteLine($"[SFTP] RENAME: {oldPath} -> {newPath}");
 
             // Check permission - rename requires both upload (write to new) and delete (remove old) permissions
-            if (_user != null && (!_user.CanUpload || !_user.CanDelete))
+            var currentUser = GetCurrentUser();
+            if (currentUser != null && (!currentUser.CanUpload || !currentUser.CanDelete))
             {
                 if (_enableLogging)
-                    Console.WriteLine($"[SFTP] RENAME DENIED: User '{_user.Username}' does not have rename permission");
+                    Console.WriteLine($"[SFTP] RENAME DENIED: User '{currentUser.Username}' does not have rename permission");
                 SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied");
                 return;
             }
@@ -792,10 +805,11 @@ namespace SFTPServer.Services
                 Console.WriteLine($"[SFTP] SETSTAT: {path}");
 
             // Check permission - setstat requires upload permission
-            if (_user != null && !_user.CanUpload)
+            var currentUser = GetCurrentUser();
+            if (currentUser != null && !currentUser.CanUpload)
             {
                 if (_enableLogging)
-                    Console.WriteLine($"[SFTP] SETSTAT DENIED: User '{_user.Username}' does not have permission");
+                    Console.WriteLine($"[SFTP] SETSTAT DENIED: User '{currentUser.Username}' does not have permission");
                 SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied");
                 return;
             }
@@ -871,10 +885,11 @@ namespace SFTPServer.Services
                 Console.WriteLine($"[SFTP] FSETSTAT: handle={handle}");
 
             // Check permission
-            if (_user != null && !_user.CanUpload)
+            var currentUser = GetCurrentUser();
+            if (currentUser != null && !currentUser.CanUpload)
             {
                 if (_enableLogging)
-                    Console.WriteLine($"[SFTP] FSETSTAT DENIED: User '{_user.Username}' does not have permission");
+                    Console.WriteLine($"[SFTP] FSETSTAT DENIED: User '{currentUser.Username}' does not have permission");
                 SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied");
                 return;
             }
@@ -1000,10 +1015,11 @@ namespace SFTPServer.Services
                 Console.WriteLine($"[SFTP] SYMLINK: {linkPath} -> {targetPath}");
 
             // Check permission - symlink requires upload permission
-            if (_user != null && !_user.CanUpload)
+            var currentUser = GetCurrentUser();
+            if (currentUser != null && !currentUser.CanUpload)
             {
                 if (_enableLogging)
-                    Console.WriteLine($"[SFTP] SYMLINK DENIED: User '{_user.Username}' does not have permission");
+                    Console.WriteLine($"[SFTP] SYMLINK DENIED: User '{currentUser.Username}' does not have permission");
                 SendStatus(requestId, SSH_FX_PERMISSION_DENIED, "Permission denied");
                 return;
             }
