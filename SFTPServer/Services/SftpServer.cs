@@ -19,7 +19,21 @@ namespace SFTPServer.Services
         {
             _config = config ?? new SftpServerConfiguration();
             _userManager = userManager ?? new UserManager();
+            EnsureRootDirectoryExists();
             InitializeDirectories();
+        }
+
+        /// <summary>
+        /// Ensure the root directory exists before starting
+        /// </summary>
+        private void EnsureRootDirectoryExists()
+        {
+            if (!Directory.Exists(_config.RootDirectory))
+            {
+                Directory.CreateDirectory(_config.RootDirectory);
+                if (_config.EnableLogging)
+                    Console.WriteLine($"Created root directory: {_config.RootDirectory}");
+            }
         }
 
         /// <summary>
@@ -65,8 +79,8 @@ namespace SFTPServer.Services
 
             try
             {
-                // Setup audit logger if enabled
-                _audit = _config.EnableAuditLog ? new AuditLogger(_config.AuditLogPath, true) : null;
+                // Setup audit logger only if enabled in settings
+                _audit = _config.EnableAuditLog ? new AuditLogger(_config.AuditLogPath, _config.EnableAuditLog) : null;
                 // Use provided ephemeral host keys from configuration if set; otherwise generate new ones per start
                 var rsa2048BitPem = string.IsNullOrWhiteSpace(_config.RsaHostKey)
                     ? KeyGenerator.GenerateRsaKeyPem(2048)

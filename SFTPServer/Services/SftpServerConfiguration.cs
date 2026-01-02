@@ -82,13 +82,24 @@ namespace SFTPServer.Services
         public SftpServerConfiguration()
         {
             // Set defaults only if not already set
-            RootDirectory ??= OperatingSystem.IsWindows()
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SftpRoot")
-                : "/var/sftp";
-
-            AuditLogPath ??= OperatingSystem.IsWindows()
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SftpLogs", "audit.log")
-                : "/var/log/sftp/audit.log";
+            if (OperatingSystem.IsWindows())
+            {
+                RootDirectory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SftpRoot");
+                AuditLogPath ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SftpLogs", "audit.log");
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                // macOS: Use user's home directory to avoid permission issues
+                var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                RootDirectory ??= Path.Combine(homeDir, ".sftp", "root");
+                AuditLogPath ??= Path.Combine(homeDir, ".sftp", "logs", "audit.log");
+            }
+            else
+            {
+                // Linux
+                RootDirectory ??= "/var/sftp";
+                AuditLogPath ??= "/var/log/sftp/audit.log";
+            }
 
             EnsureDirectoriesExist();
         }

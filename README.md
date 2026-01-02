@@ -21,7 +21,7 @@ dotnet add package SFTPServerLib
 - **User Management** - Built-in user authentication with granular permissions
 - **Audit Logging** - Track all file operations for compliance and debugging
 - **Connection Limits** - Configure maximum concurrent connections
-- **Cross-Platform** - Runs on Windows and Linux
+- **Cross-Platform** - Runs on Windows, macOS, and Linux
 - **Secure** - RSA and ECDSA host key support with SHA-2 algorithms
 
 ---
@@ -86,10 +86,12 @@ await Task.Delay(-1);
 
 \* **RootDirectory defaults:**
 - Windows: `%APPDATA%\SftpRoot`
+- macOS: `~/.sftp/root`
 - Linux: `/var/sftp`
 
 \*\* **AuditLogPath defaults:**
 - Windows: `%APPDATA%\SftpLogs\audit.log`
+- macOS: `~/.sftp/logs/audit.log`
 - Linux: `/var/log/sftp/audit.log`
 
 ---

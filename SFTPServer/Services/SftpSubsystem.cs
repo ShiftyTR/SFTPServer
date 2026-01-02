@@ -1074,10 +1074,18 @@ namespace SFTPServer.Services
 
             // Combine with root
             string fullPath = Path.Combine(_rootDirectory, path.Replace('/', Path.DirectorySeparatorChar));
-            
+
             // Security: Ensure path is within root directory
             string normalizedPath = Path.GetFullPath(fullPath);
-            if (!normalizedPath.StartsWith(_rootDirectory, StringComparison.OrdinalIgnoreCase))
+            string normalizedRoot = Path.GetFullPath(_rootDirectory);
+
+            // Use case-sensitive comparison on Unix-like systems (Linux, macOS)
+            // Use case-insensitive comparison on Windows
+            var comparison = OperatingSystem.IsWindows() 
+                ? StringComparison.OrdinalIgnoreCase 
+                : StringComparison.Ordinal;
+
+            if (!normalizedPath.StartsWith(normalizedRoot, comparison))
             {
                 return _rootDirectory;
             }
