@@ -1,6 +1,17 @@
 # SFTP Server
 
+[![NuGet](https://img.shields.io/nuget/v/SFTPServerLib.svg)](https://www.nuget.org/packages/SFTPServerLib)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/SFTPServerLib.svg)](https://www.nuget.org/packages/SFTPServerLib)
+
 A lightweight, enterprise-ready SFTP server built on .NET 8 using the FxSsh library. Compatible with popular SFTP clients like FileZilla, WinSCP, and OpenSSH.
+
+---
+
+## Installation
+
+```bash
+dotnet add package SFTPServerLib
+```
 
 ---
 

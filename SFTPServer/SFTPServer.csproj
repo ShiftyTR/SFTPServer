@@ -6,6 +6,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+
+    <!-- NuGet Package Properties -->
+    <PackageId>SFTPServerLib</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>ShiftyTR</Authors>
+    <Company>ShiftyTR</Company>
+    <Description>A simple SFTP server library for .NET 8</Description>
+    <PackageTags>sftp;ssh;server;file-transfer</PackageTags>
+    <PackageProjectUrl>https://github.com/ShiftyTR/SFTPServer</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ShiftyTR/SFTPServer</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +27,23 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FxSsh\FxSsh.csproj" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- FxSsh is embedded directly into this package, no separate dependency -->
+    <ProjectReference Include="..\FxSsh\FxSsh.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Include FxSsh DLL directly in the package -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeFxSshInPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="IncludeFxSshInPackage">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(OutputPath)FxSsh.dll" />
+    </ItemGroup>
+  </Target>
 
 </Project>
