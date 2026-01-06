@@ -82,26 +82,76 @@ namespace SFTPServer.Services
         public SftpServerConfiguration()
         {
             // Set defaults only if not already set
-            if (OperatingSystem.IsWindows())
-            {
-                RootDirectory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SftpRoot");
-                AuditLogPath ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SftpLogs", "audit.log");
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                // macOS: Use user's home directory to avoid permission issues
-                var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                RootDirectory ??= Path.Combine(homeDir, ".sftp", "root");
-                AuditLogPath ??= Path.Combine(homeDir, ".sftp", "logs", "audit.log");
-            }
-            else
-            {
-                // Linux
-                RootDirectory ??= "/var/sftp";
-                AuditLogPath ??= "/var/log/sftp/audit.log";
-            }
+            RootDirectory ??= GetDefaultRootDirectory();
+            AuditLogPath ??= GetDefaultAuditLogPath();
 
             EnsureDirectoriesExist();
+        }
+
+        /// <summary>
+        /// Gets the default root directory based on the current platform and available permissions
+        /// </summary>
+        private static string GetDefaultRootDirectory()
+        {
+            // Try user home directory first (works on all platforms without elevated permissions)
+            var homeDir = GetUserHomeDirectory();
+            if (!string.IsNullOrEmpty(homeDir))
+            {
+                return Path.Combine(homeDir, ".sftp", "root");
+            }
+
+            // Fallback to temp directory if home is not available
+            return Path.Combine(Path.GetTempPath(), "sftp", "root");
+        }
+
+        /// <summary>
+        /// Gets the default audit log path based on the current platform and available permissions
+        /// </summary>
+        private static string GetDefaultAuditLogPath()
+        {
+            var homeDir = GetUserHomeDirectory();
+            if (!string.IsNullOrEmpty(homeDir))
+            {
+                return Path.Combine(homeDir, ".sftp", "logs", "audit.log");
+            }
+
+            return Path.Combine(Path.GetTempPath(), "sftp", "logs", "audit.log");
+        }
+
+        /// <summary>
+        /// Gets the user's home directory in a cross-platform way
+        /// </summary>
+        private static string GetUserHomeDirectory()
+        {
+            // Try HOME environment variable first (Linux/macOS)
+            var home = Environment.GetEnvironmentVariable("HOME");
+            if (!string.IsNullOrEmpty(home) && Directory.Exists(home))
+            {
+                return home;
+            }
+
+            // Try USERPROFILE for Windows
+            var userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+            if (!string.IsNullOrEmpty(userProfile) && Directory.Exists(userProfile))
+            {
+                return userProfile;
+            }
+
+            // Try .NET's built-in method
+            var specialFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(specialFolder) && Directory.Exists(specialFolder))
+            {
+                return specialFolder;
+            }
+
+            // Last resort: try ApplicationData
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrEmpty(appData) && Directory.Exists(appData))
+            {
+                return appData;
+            }
+
+            return string.Empty;
         }
 
         /// <summary>
@@ -109,15 +159,40 @@ namespace SFTPServer.Services
         /// </summary>
         public void EnsureDirectoriesExist()
         {
-            if (!Directory.Exists(RootDirectory))
-            {
-                Directory.CreateDirectory(RootDirectory);
-            }
+            TryCreateDirectory(RootDirectory);
 
             var logDir = Path.GetDirectoryName(AuditLogPath);
-            if (!string.IsNullOrEmpty(logDir) && !Directory.Exists(logDir))
+            if (!string.IsNullOrEmpty(logDir))
             {
-                Directory.CreateDirectory(logDir);
+                TryCreateDirectory(logDir);
+            }
+        }
+
+        /// <summary>
+        /// Tries to create a directory, handling permission errors gracefully
+        /// </summary>
+        private static bool TryCreateDirectory(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return false;
+
+            try
+            {
+                if (!Directory.Exists(path))
+                {
+                    Directory.CreateDirectory(path);
+                }
+                return true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Permission denied - directory cannot be created
+                return false;
+            }
+            catch (IOException)
+            {
+                // IO error - path may be invalid or inaccessible
+                return false;
             }
         }
     }

@@ -85,14 +85,14 @@ await Task.Delay(-1);
 | `EcdsaP256HostKey` | `string` | Auto-generated | ECDSA P-256 host key in PEM format |
 
 \* **RootDirectory defaults:**
-- Windows: `%APPDATA%\SftpRoot`
-- macOS: `~/.sftp/root`
-- Linux: `/var/sftp`
+- All platforms: `~/.sftp/root` (user's home directory)
+- Fallback: `{TempPath}/sftp/root` if home directory is unavailable
 
 \*\* **AuditLogPath defaults:**
-- Windows: `%APPDATA%\SftpLogs\audit.log`
-- macOS: `~/.sftp/logs/audit.log`
-- Linux: `/var/log/sftp/audit.log`
+- All platforms: `~/.sftp/logs/audit.log` (user's home directory)
+- Fallback: `{TempPath}/sftp/logs/audit.log` if home directory is unavailable
+
+> **Note:** The server automatically detects the user's home directory using environment variables (`HOME` on Linux/macOS, `USERPROFILE` on Windows) and handles permission errors gracefully.
 
 ---
 
